@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#121212">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Melodify - Music Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="manifest" href="/manifest.json">
+    <script src="cordova.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --primary: #1db954;
+            --dark: #121212;
+            --darker: #0f0f0f;
+            --gray: #282828;
+            --light-gray: #b3b3b3;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--darker);
+            color: white;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e1e1e 0%, var(--dark) 100%);
+        }
+        
+        .song-card:hover {
+            transform: scale(1.03);
+            transition: all 0.3s ease;
+            background-color: var(--gray);
+        }
+        
+        .progress-bar {
+            height: 4px;
+            background-color: #4d4d4d;
+            border-radius: 2px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary);
+            border-radius: 2px;
+            width: 30%;
+        }
+        
+        .player-container {
+            background: linear-gradient(90deg, #1e1e1e 0%, var(--dark) 100%);
+            box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .volume-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #4d4d4d;
+            border-radius: 2px;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .blur-bg {
+            backdrop-filter: blur(10px);
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+        
+        .play-btn {
+            transition: all 0.2s ease;
+        }
+        
+        .play-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        .play-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .album-art {
+            background-size: cover;
+            background-position: center;
+        }
+        
+        /* For mobile swipe gestures */
+        .swipe-area {
+            touch-action: pan-y;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--dark);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--gray);
+            border-radius: 3px;
+        }
+        
+        /* Animation for now playing bar */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .now-playing {
+            animation: pulse 2s infinite;
+        }
+        
+        /* For fullscreen player */
+        .fullscreen-player {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 100;
+            background: linear-gradient(180deg, var(--dark) 0%, #000 100%);
+            display: none;
+        }
+        
+        /* Lyrics styling */
+        .lyrics-container {
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+        
+        .lyric-line {
+            margin: 1rem 0;
+            color: var(--light-gray);
+            transition: all 0.3s ease;
+        }
+        
+        .lyric-line.active {
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col swipe-area">
+    <!-- Navigation -->
+    <nav class="gradient-bg p-4 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center space-x-4">
+            <div class="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                <i class="fas fa-music text-white"></i>
+            </div>
+            <span class="text-xl font-bold">Melodify</span>
+        </div>
+        
+        <div class="hidden md:flex items-center space-x-6">
+            <a href="#" class="hover:text-green-400 transition">Home</a>
+            <a href="#" class="hover:text-green-400 transition">Browse</a>
+            <a href="#" class="hover:text-green-400 transition">Library</a>
+            <a href="#" class="hover:text-green-400 transition">Search</a>
+        </div>
+        
+        <div class="flex items-center space-x-4">
+            <button class="bg-white text-black px-4 py-1 rounded-full font-medium hover:bg-gray-200 transition">
+                Upgrade
+            </button>
+            <div class="w-8 h-8 bg-gray-600 rounded-full"></div>
+        </div>
+    </nav>
+    
+    <!-- Mobile Navigation -->
+    <div class="md:hidden gradient-bg fixed bottom-0 left-0 right-0 flex justify-around p-3 z-50">
+        <a href="#" class="flex flex-col items-center text-sm">
+            <i class="fas fa-home text-xl mb-1"></i>
+            <span>Home</span>
+        </a>
+        <a href="#" class="flex flex-col items-center text-sm">
+            <i class="fas fa-search text-xl mb-1"></i>
+            <span>Search</span>
+        </a>
+        <a href="#" class="flex flex-col items-center text-sm">
+            <i class="fas fa-music text-xl mb-1"></i>
+            <span>Library</span>
+        </a>
+        <a href="#" class="flex flex-col items-center text-sm">
+            <i class="fas fa-user text-xl mb-1"></i>
+            <span>Profile</span>
+        </a>
+    </div>
+    
+    <!-- Main Content -->
+    <main class="flex-grow p-6 pb-24 md:pb-6 overflow-y-auto">
+        <div class="max-w-7xl mx-auto">
+            <!-- Hero Section -->
+            <section class="mb-10 relative rounded-xl overflow-hidden">
+                <div class="blur-bg absolute inset-0"></div>
+                <div class="relative z-10 p-8 md:p-12 flex flex-col md:flex-row items-center">
+                    <div class="md:w-1/2 mb-6 md:mb-0">
+                        <h1 class="text-4xl md:text-5xl font-bold mb-4">Your Daily Mix</h1>
+                        <p class="text-lg mb-6 text-gray-300">A personalized playlist just for you, updated daily with music we think you'll love.</p>
+                        <button class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-bold flex items-center play-btn">
+                            <i class="fas fa-play mr-2"></i> Play All
+                        </button>
+                    </div>
+                    <div class="md:w-1/2 flex justify-center">
+                        <div class="w-64 h-64 md:w-80 md:h-80 rounded-xl shadow-2xl flex items-center justify-center album-art now-playing" style="background-image: url('https://i.scdn.co/image/ab67706f00000002ca5a7517a0f0a39162a8624b')">
+                            <i class="fas fa-music text-6xl text-white opacity-80"></i>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Recently Played -->
+            <section class="mb-10">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold">Recently Played</h2>
+                    <button class="text-sm text-gray-400 hover:text-white">See all</button>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    <!-- Song Card 1 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02e1a0e0c1548f869e11083b22" alt="Blinding Lights Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Blinding Lights</h3>
+                        <p class="text-sm text-gray-400 truncate">The Weeknd</p>
+                    </div>
+                    
+                    <!-- Song Card 2 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1" alt="Save Your Tears Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Save Your Tears</h3>
+                        <p class="text-sm text-gray-400 truncate">The Weeknd</p>
+                    </div>
+                    
+                    <!-- Song Card 3 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02a991995542d50a691b9ae5be" alt="Levitating Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Levitating</h3>
+                        <p class="text-sm text-gray-400 truncate">Dua Lipa</p>
+                    </div>
+                    
+                    <!-- Song Card 4 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02e1a0e0c1548f869e11083b22" alt="Stay Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Stay</h3>
+                        <p class="text-sm text-gray-400 truncate">The Kid LAROI, Justin Bieber</p>
+                    </div>
+                    
+                    <!-- Song Card 5 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02a991995542d50a691b9ae5be" alt="Good 4 U Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Good 4 U</h3>
+                        <p class="text-sm text-gray-400 truncate">Olivia Rodrigo</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Made For You -->
+            <section class="mb-10">
+                <h2 class="text-2xl font-bold mb-6">Made For You</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Playlist 1 -->
+                    <div class="song-card bg-gray-800 p-5 rounded-lg cursor-pointer flex items-center">
+                        <div class="w-16 h-16 rounded-md flex-shrink-0 album-art" style="background-image: url('https://mosaic.scdn.co/640/ab67616d00001e02e1a0e0c1548f869e11083b22ab67616d00001e02a991995542d50a691b9ae5beab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1ab67616d00001e02e1a0e0c1548f869e11083b22')"></div>
+                        <div class="ml-4">
+                            <h3 class="font-semibold">Liked Songs</h3>
+                            <p class="text-sm text-gray-400">Playlist • 124 songs</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Playlist 2 -->
+                    <div class="song-card bg-gray-800 p-5 rounded-lg cursor-pointer flex items-center">
+                        <div class="w-16 h-16 rounded-md flex-shrink-0 album-art" style="background-image: url('https://mosaic.scdn.co/640/ab67616d00001e02a991995542d50a691b9ae5beab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1ab67616d00001e02e1a0e0c1548f869e11083b22ab67616d00001e02a991995542d50a691b9ae5be')"></div>
+                        <div class="ml-4">
+                            <h3 class="font-semibold">Discover Weekly</h3>
+                            <p class="text-sm text-gray-400">Playlist • Updated weekly</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Playlist 3 -->
+                    <div class="song-card bg-gray-800 p-5 rounded-lg cursor-pointer flex items-center">
+                        <div class="w-16 h-16 rounded-md flex-shrink-0 album-art" style="background-image: url('https://mosaic.scdn.co/640/ab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1ab67616d00001e02e1a0e0c1548f869e11083b22ab67616d00001e02a991995542d50a691b9ae5beab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1')"></div>
+                        <div class="ml-4">
+                            <h3 class="font-semibold">Release Radar</h3>
+                            <p class="text-sm text-gray-400">Playlist • Updated weekly</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Popular Albums -->
+            <section>
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold">Popular Albums</h2>
+                    <button class="text-sm text-gray-400 hover:text-white">See all</button>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    <!-- Album 1 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02a991995542d50a691b9ae5be" alt="Future Nostalgia Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Future Nostalgia</h3>
+                        <p class="text-sm text-gray-400 truncate">Dua Lipa</p>
+                    </div>
+                    
+                    <!-- Album 2 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1" alt="After Hours Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">After Hours</h3>
+                        <p class="text-sm text-gray-400 truncate">The Weeknd</p>
+                    </div>
+                    
+                    <!-- Album 3 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02a991995542d50a691b9ae5be" alt="Sour Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Sour</h3>
+                        <p class="text-sm text-gray-400 truncate">Olivia Rodrigo</p>
+                    </div>
+                    
+                    <!-- Album 4 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02e1a0e0c1548f869e11083b22" alt="Planet Her Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Planet Her</h3>
+                        <p class="text-sm text-gray-400 truncate">Doja Cat</p>
+                    </div>
+                    
+                    <!-- Album 5 -->
+                    <div class="song-card bg-gray-800 p-4 rounded-lg cursor-pointer">
+                        <div class="relative mb-3">
+                            <img src="https://i.scdn.co/image/ab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1" alt="Justice Cover" class="w-full rounded-lg">
+                            <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                                <i class="fas fa-play text-white"></i>
+                            </button>
+                        </div>
+                        <h3 class="font-semibold truncate">Justice</h3>
+                        <p class="text-sm text-gray-400 truncate">Justin Bieber</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+    
+    <!-- Fullscreen Player (hidden by default) -->
+    <div class="fullscreen-player" id="fullscreenPlayer">
+        <div class="absolute top-4 right-4 z-10">
+            <button id="closeFullscreen" class="text-white text-2xl">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="h-full flex flex-col items-center justify-center p-6">
+            <!-- Album Art -->
+            <div class="w-64 h-64 md:w-80 md:h-80 rounded-xl shadow-2xl mb-8 album-art" id="fullscreenAlbumArt">
+                <i class="fas fa-music text-6xl text-white opacity-80"></i>
+            </div>
+            
+            <!-- Song Info -->
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-bold" id="fullscreenSongTitle">Blinding Lights</h2>
+                <p class="text-lg text-gray-400" id="fullscreenArtist">The Weeknd</p>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div class="w-full max-w-md mb-6">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-gray-400" id="currentTime">0:00</span>
+                    <span class="text-sm text-gray-400" id="totalTime">3:20</span>
+                </div>
+                <div class="progress-bar w-full">
+                    <div class="progress-fill" id="fullscreenProgress"></div>
+                </div>
+            </div>
+            
+            <!-- Controls -->
+            <div class="flex items-center justify-center space-x-8 mb-8">
+                <button class="text-gray-400 hover:text-white text-xl">
+                    <i class="fas fa-random"></i>
+                </button>
+                <button class="text-gray-400 hover:text-white text-2xl">
+                    <i class="fas fa-step-backward"></i>
+                </button>
+                <button class="bg-white text-black w-14 h-14 rounded-full flex items-center justify-center play-btn" id="fullscreenPlayBtn">
+                    <i class="fas fa-pause text-xl"></i>
+                </button>
+                <button class="text-gray-400 hover:text-white text-2xl">
+                    <i class="fas fa-step-forward"></i>
+                </button>
+                <button class="text-gray-400 hover:text-white text-xl">
+                    <i class="fas fa-redo"></i>
+                </button>
+            </div>
+            
+            <!-- Lyrics Section -->
+            <div class="lyrics-container w-full max-w-md text-center px-4">
+                <h3 class="text-lg font-semibold mb-4">Lyrics</h3>
+                <div id="lyricsContent">
+                    <p class="lyric-line">I've been tryna call</p>
+                    <p class="lyric-line active">I've been on my own for long enough</p>
+                    <p class="lyric-line">Maybe you can show me how to love, maybe</p>
+                    <p class="lyric-line">I'm going through withdrawals</p>
+                    <p class="lyric-line">You don't even have to do too much</p>
+                    <p class="lyric-line">You can turn me on with just a touch, baby</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Music Player -->
+    <div class="player-container fixed bottom-0 left-0 right-0 p-3 md:p-4 border-t border-gray-800" id="miniPlayer">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center">
+            <!-- Song Info -->
+            <div class="flex items-center w-full md:w-1/4 mb-3 md:mb-0">
+                <img src="https://i.scdn.co/image/ab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1" alt="Now Playing" class="w-12 h-12 rounded-md cursor-pointer" id="expandPlayer">
+                <div class="ml-3">
+                    <h4 class="font-medium text-sm" id="currentSong">Blinding Lights</h4>
+                    <p class="text-xs text-gray-400" id="currentArtist">The Weeknd</p>
+                </div>
+                <button class="ml-4 text-gray-400 hover:text-white" id="likeBtn">
+                    <i class="far fa-heart"></i>
+                </button>
+            </div>
+            
+            <!-- Player Controls -->
+            <div class="w-full md:w-2/4 flex flex-col items-center">
+                <div class="flex items-center space-x-6 mb-2">
+                    <button class="text-gray-400 hover:text-white text-lg" id="shuffleBtn">
+                        <i class="fas fa-random"></i>
+                    </button>
+                    <button class="text-gray-400 hover:text-white text-xl" id="prevBtn">
+                        <i class="fas fa-step-backward"></i>
+                    </button>
+                    <button class="bg-white text-black w-8 h-8 rounded-full flex items-center justify-center play-btn" id="playBtn">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="text-gray-400 hover:text-white text-xl" id="nextBtn">
+                        <i class="fas fa-step-forward"></i>
+                    </button>
+                    <button class="text-gray-400 hover:text-white text-lg" id="repeatBtn">
+                        <i class="fas fa-redo"></i>
+                    </button>
+                </div>
+                <div class="w-full flex items-center space-x-3">
+                    <span class="text-xs text-gray-400" id="miniCurrentTime">0:00</span>
+                    <div class="progress-bar flex-grow">
+                        <div class="progress-fill" id="miniProgress"></div>
+                    </div>
+                    <span class="text-xs text-gray-400" id="miniTotalTime">0:00</span>
+                </div>
+            </div>
+            
+            <!-- Volume Controls -->
+            <div class="hidden md:flex items-center justify-end w-1/4 space-x-3">
+                <i class="fas fa-volume-up text-gray-400"></i>
+                <input type="range" class="volume-slider w-24" min="0" max="100" id="volumeSlider" value="70">
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Music player data
+        const songs = [
+            {
+                title: "Blinding Lights",
+                artist: "The Weeknd",
+                cover: "https://i.scdn.co/image/ab67616d00001e02e1a0e0c1548f869e11083b22",
+                duration: 200,
+                liked: false,
+                lyrics: [
+                    { time: 0, text: "I've been tryna call" },
+                    { time: 5, text: "I've been on my own for long enough" },
+                    { time: 10, text: "Maybe you can show me how to love, maybe" },
+                    { time: 15, text: "I'm going through withdrawals" },
+                    { time: 20, text: "You don't even have to do too much" },
+                    { time: 25, text: "You can turn me on with just a touch, baby" }
+                ]
+            },
+            {
+                title: "Save Your Tears",
+                artist: "The Weeknd",
+                cover: "https://i.scdn.co/image/ab67616d00001e02c591d9f0e7e0a0e4a9c0c8a1",
+                duration: 215,
+                liked: true,
+                lyrics: [
+                    { time: 0, text: "Take me back to the night we met" },
+                    { time: 5, text: "I don't know what you're doing" },
+                    { time: 10, text: "But I'm about to break down and cry" },
+                    { time: 15, text: "I'm searching for something that I can't reach" },
+                    { time: 20, text: "I don't like who I've become" },
+                    { time: 25, text: "I need you to save your tears for another" }
+                ]
+            },
+            {
+                title: "Levitating",
+                artist: "Dua Lipa",
+                cover: "https://i.scdn.co/image/ab67616d00001e02a991995542d50a691b9ae5be",
+                duration: 203,
+                liked: false,
+                lyrics: [
+                    { time: 0, text: "If you wanna run away with me, I know a galaxy" },
+                    { time: 5, text: "And I can take you for a ride" },
+                    { time: 10, text: "I had a premonition that we fell into a rhythm" },
+                    { time: 15, text: "Where the music don't stop for life" },
+                    { time: 20, text: "Glitter in the sky, glitter in my eyes" },
+                    { time: 25, text: "Shining just the way I like" }
+                ]
+            }
+        ];
+        
+        // Current state
+        let currentSongIndex = 0;
+        let isPlaying = false;
+        let currentTime = 0;
+        let progressInterval;
+        let isShuffled = false;
+        let repeatMode = 'none'; // none, one, all
+        
+        // DOM elements
+        const miniPlayer = document.getElementById('miniPlayer');
+        const fullscreenPlayer = document.getElementById('fullscreenPlayer');
+        const expandPlayerBtn = document.getElementById('expandPlayer');
+        const closeFullscreenBtn = document.getElementById('closeFullscreen');
+        const playBtn = document.getElementById('playBtn');
+        const fullscreenPlayBtn = document.getElementById('fullscreenPlayBtn');
+        const likeBtn = document.getElementById('likeBtn');
+        const shuffleBtn = document.getElementById('shuffleBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const repeatBtn = document.getElementById('repeatBtn');
+        const currentSongEl = document.getElementById('currentSong');
+        const currentArtistEl = document.getElementById('currentArtist');
+        const fullscreenSongTitle = document.getElementById('fullscreenSongTitle');
+        const fullscreenArtist = document.getElementById('fullscreenArtist');
+        const fullscreenAlbumArt = document.getElementById('fullscreenAlbumArt');
+        const miniProgress = document.getElementById('miniProgress');
+        const fullscreenProgress = document.getElementById('fullscreenProgress');
+        const currentTimeEl = document.getElementById('currentTime');
+        const totalTimeEl = document.getElementById('totalTime');
+        const miniCurrentTime = document.getElementById('miniCurrentTime');
+        const miniTotalTime = document.getElementById('miniTotalTime');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const lyricsContent = document.getElementById('lyricsContent');
+        
+        // Wait for Cordova to load
+        document.addEventListener('deviceready', onDeviceReady, false);
+        
+        function onDeviceReady() {
+            // Initialize the app
+            initApp();
+        }
+        
+        function initApp() {
+            // Request storage permissions
+            if (cordova.platformId === 'android') {
+                cordova.plugins.permissions.requestPermission(
+                    cordova.plugins.permissions.READ_EXTERNAL_STORAGE,
+                    success,
+                    error
+                );
+            }
+            
+            // Initialize player
+            initPlayer();
+        }
+        
+        function success(status) {
+            if (status.hasPermission) {
+                // Permission granted, load music files
+                loadMusicFiles();
+            }
+        }
+        
+        function error() {
+            console.error('Permission denied');
+        }
+        
+        function loadMusicFiles() {
+            // Get music files from device storage
+            window.resolveLocalFileSystemURL(cordova.file.externalRootDirectory, function(dirEntry) {
+                dirEntry.getDirectory('Music', {create: false}, function(musicDir) {
+                    var reader = musicDir.createReader();
+                    reader.readEntries(function(entries) {
+                        // Filter for music files
+                        var musicFiles = entries.filter(function(entry) {
+                            return entry.isFile && /\.(mp3|wav|ogg|m4a)$/i.test(entry.name);
+                        });
+                        
+                        // Add music files to player
+                        musicFiles.forEach(function(file) {
+                            songs.push({
+                                title: file.name.replace(/\.[^/.]+$/, ""),
+                                artist: "Unknown Artist",
+                                cover: "https://i.scdn.co/image/ab67616d00001e02e1a0e0c1548f869e11083b22",
+                                duration: 0,
+                                liked: false,
+                                file: file.nativeURL,
+                                lyrics: []
+                            });
+                        });
+                        
+                        // Update UI with loaded songs
+                        updateSongList();
+                    });
+                });
+            });
+        }
+        
+        function updateSongList() {
+            const songList = document.querySelector('.grid');
+            songList.innerHTML = '';
+            
+            songs.forEach((song, index) => {
+                const songCard = document.createElement('div');
+                songCard.className = 'song-card bg-gray-800 p-4 rounded-lg cursor-pointer';
+                songCard.innerHTML = `
+                    <div class="relative mb-3">
+                        <img src="${song.cover}" alt="${song.title} Cover" class="w-full rounded-lg">
+                        <button class="absolute bottom-2 right-2 bg-green-500 w-10 h-10 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+                            <i class="fas fa-play text-white"></i>
+                        </button>
+                    </div>
+                    <h3 class="font-semibold truncate">${song.title}</h3>
+                    <p class="text-sm text-gray-400 truncate">${song.artist}</p>
+                `;
+                
+                songCard.addEventListener('click', () => {
+                    currentSongIndex = index;
+                    loadSong(currentSongIndex);
+                    togglePlay();
+                });
+                
+                songList.appendChild(songCard);
+            });
+        }
+        
+        // Modified loadSong function to use Cordova Media API
+        function loadSong(index) {
+            const song = songs[index];
+            currentSongEl.textContent = song.title;
+            currentArtistEl.textContent = song.artist;
+            fullscreenSongTitle.textContent = song.title;
+            fullscreenArtist.textContent = song.artist;
+            fullscreenAlbumArt.style.backgroundImage = `url(${song.cover})`;
+            
+            // Create media object
+            if (window.media) {
+                window.media.release();
+            }
+            
+            window.media = new Media(song.file,
+                // Success callback
+                function() {
+                    console.log("Media loaded successfully");
+                },
+                // Error callback
+                function(err) {
+                    console.error("Media error: " + err.code);
+                }
+            );
+            
+            // Get duration
+            window.media.getDuration(function(duration) {
+                song.duration = duration;
+                const durationFormatted = formatTime(duration);
+                totalTimeEl.textContent = durationFormatted;
+                miniTotalTime.textContent = durationFormatted;
+            });
+            
+            // Update lyrics
+            updateLyrics(song.lyrics);
+            
+            // Update like button
+            updateLikeButton();
+        }
+        
+        // Modified togglePlay function to use Cordova Media API
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            
+            if (isPlaying) {
+                window.media.play();
+                playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                fullscreenPlayBtn.innerHTML = '<i class="fas fa-pause text-xl"></i>';
+                startProgress();
+            } else {
+                window.media.pause();
+                playBtn.innerHTML = '<i class="fas fa-play"></i>';
+                fullscreenPlayBtn.innerHTML = '<i class="fas fa-play text-xl"></i>';
+                stopProgress();
+            }
+        }
+        
+        // Modified updateProgress function to use Cordova Media API
+        function updateProgress() {
+            if (window.media) {
+                window.media.getCurrentPosition(
+                    function(position) {
+                        currentTime = position;
+                        const song = songs[currentSongIndex];
+                        const progressPercent = (position / song.duration) * 100;
+                        miniProgress.style.width = `${progressPercent}%`;
+                        fullscreenProgress.style.width = `${progressPercent}%`;
+                        
+                        currentTimeEl.textContent = formatTime(position);
+                        miniCurrentTime.textContent = formatTime(position);
+                        
+                        updateActiveLyric(position);
+                        
+                        if (position >= song.duration) {
+                            if (repeatMode === 'one') {
+                                window.media.seekTo(0);
+                                window.media.play();
+                            } else if (repeatMode === 'all') {
+                                playNext();
+                            } else {
+                                if (currentSongIndex === songs.length - 1) {
+                                    stopProgress();
+                                    isPlaying = false;
+                                    togglePlay();
+                                } else {
+                                    playNext();
+                                }
+                            }
+                        }
+                    },
+                    function(error) {
+                        console.error("Error getting position: " + error);
+                    }
+                );
+            }
+        }
+        
+        // Modified updateVolume function to use Cordova Media API
+        function updateVolume() {
+            if (window.media) {
+                const volume = volumeSlider.value / 100;
+                window.media.setVolume(volume);
+            }
+        }
+        
+        // Initialize player
+        function initPlayer() {
+            loadSong(currentSongIndex);
+            updateLikeButton();
+            
+            // Set up event listeners
+            expandPlayerBtn.addEventListener('click', openFullscreenPlayer);
+            closeFullscreenBtn.addEventListener('click', closeFullscreenPlayer);
+            playBtn.addEventListener('click', togglePlay);
+            fullscreenPlayBtn.addEventListener('click', togglePlay);
+            likeBtn.addEventListener('click', toggleLike);
+            volumeSlider.addEventListener('input', updateVolume);
+            shuffleBtn.addEventListener('click', toggleShuffle);
+            prevBtn.addEventListener('click', playPrevious);
+            nextBtn.addEventListener('click', playNext);
+            repeatBtn.addEventListener('click', toggleRepeat);
+            
+            // Simulate progress for demo
+            simulateProgress();
+        }
+        
+        // Simulate progress for demo
+        function simulateProgress() {
+            currentTime = 0;
+            const song = songs[currentSongIndex];
+            const progressPercent = (currentTime / song.duration) * 100;
+            miniProgress.style.width = `${progressPercent}%`;
+            fullscreenProgress.style.width = `${progressPercent}%`;
+            currentTimeEl.textContent = formatTime(currentTime);
+            miniCurrentTime.textContent = formatTime(currentTime);
+        }
+        
+        // Format time (seconds to MM:SS)
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+        
+        // Toggle like status
+        function toggleLike() {
+            songs[currentSongIndex].liked = !songs[currentSongIndex].liked;
+            updateLikeButton();
+        }
+        
+        // Update like button appearance
+        function updateLikeButton() {
+            if (songs[currentSongIndex].liked) {
+                likeBtn.innerHTML = '<i class="fas fa-heart text-red-500"></i>';
+            } else {
+                likeBtn.innerHTML = '<i class="far fa-heart"></i>';
+            }
+        }
+        
+        // Play next song
+        function playNext() {
+            if (isShuffled) {
+                currentSongIndex = Math.floor(Math.random() * songs.length);
+            } else {
+                currentSongIndex = (currentSongIndex + 1) % songs.length;
+            }
+            loadSong(currentSongIndex);
+            currentTime = 0;
+            if (isPlaying) {
+                startProgress();
+            }
+        }
+        
+        // Play previous song
+        function playPrevious() {
+            if (isShuffled) {
+                currentSongIndex = Math.floor(Math.random() * songs.length);
+            } else {
+                currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+            }
+            loadSong(currentSongIndex);
+            currentTime = 0;
+            if (isPlaying) {
+                startProgress();
+            }
+        }
+        
+        // Toggle shuffle
+        function toggleShuffle() {
+            isShuffled = !isShuffled;
+            shuffleBtn.classList.toggle('text-green-500');
+        }
+        
+        // Toggle repeat mode
+        function toggleRepeat() {
+            switch (repeatMode) {
+                case 'none':
+                    repeatMode = 'all';
+                    repeatBtn.classList.add('text-green-500');
+                    break;
+                case 'all':
+                    repeatMode = 'one';
+                    repeatBtn.innerHTML = '<i class="fas fa-redo-alt"></i><span class="text-xs">1</span>';
+                    break;
+                case 'one':
+                    repeatMode = 'none';
+                    repeatBtn.classList.remove('text-green-500');
+                    repeatBtn.innerHTML = '<i class="fas fa-redo"></i>';
+                    break;
+            }
+        }
+        
+        // Open fullscreen player
+        function openFullscreenPlayer() {
+            fullscreenPlayer.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // Close fullscreen player
+        function closeFullscreenPlayer() {
+            fullscreenPlayer.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Update lyrics display
+        function updateLyrics(lyrics) {
+            lyricsContent.innerHTML = '';
+            lyrics.forEach(line => {
+                const p = document.createElement('p');
+                p.className = 'lyric-line';
+                p.textContent = line.text;
+                p.dataset.time = line.time;
+                lyricsContent.appendChild(p);
+            });
+        }
+        
+        // Update active lyric based on current time
+        function updateActiveLyric(currentTime) {
+            const lines = document.querySelectorAll('.lyric-line');
+            let activeLine = null;
+            
+            lines.forEach(line => {
+                line.classList.remove('active');
+                const lineTime = parseInt(line.dataset.time);
+                
+                if (lineTime <= currentTime) {
+                    activeLine = line;
+                }
+            });
+            
+            if (activeLine) {
+                activeLine.classList.add('active');
+                
+                // Scroll to active line
+                activeLine.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+        }
+        
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', initPlayer);
+        
+        // Service Worker Registration for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }).catch(err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+    </script>
+    
+    <!-- For PWA (Progressive Web App) -->
+    <script>
+        // Check if the app is running in standalone mode
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            console.log('Running in standalone mode');
+        }
+        
+        // Add to home screen prompt
+        let deferredPrompt;
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent the mini-infobar from appearing on mobile
+            e.preventDefault();
+            // Stash the event so it can be triggered later
+            deferredPrompt = e;
+            // Update UI notify the user they can install the PWA
+            console.log('App can be installed');
+            
+            // Show install button (you would implement this in your UI)
+            // document.getElementById('installButton').style.display = 'block';
+        });
+    </script>
+</body>
+</html>
